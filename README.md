@@ -1,47 +1,85 @@
 # overlay-manager
 
-A dedicated CLI tool and library for managing [stream-overlay-socket](https://github.com/dethz-tools) overlays in the static folder, installing overlays from Git, checking overlay health, and installing target libraries.
+[![GitHub repository](https://img.shields.io/badge/GitHub-dethz--live--tools%2Foverlay--manager-blue?logo=github)](https://github.com/dethz-live-tools/overlay-manager)
+[![Version](https://img.shields.io/badge/version-1.5.0-green.svg)](https://github.com/dethz-live-tools/overlay-manager/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Bun](https://img.shields.io/badge/Built%20with-Bun-f472b6?logo=bun)](https://bun.sh)
+
+> *Just a little package to controlling overlay.*
+
+A dedicated CLI tool and TypeScript library for managing [stream-overlay-socket](https://github.com/dethz-live-tools/stream-overlay-socket) overlays in the static folder, installing overlays from Git, checking overlay health, auto-setting up the shared `libs` directory, and controlling overlays and libraries via `overlay.config.json`.
+
+---
 
 ## Features
 
 - 🛠 **CLI Framework**: Built with **yargs**, styled with **chalk**, and featuring interactive terminal prompts powered by **@inquirer/prompts**.
-- ⚙️ **Persistent Configuration**: Store the static folder path in `overlay.config.json`, `overlay.config.yaml`, or `.overlayrc`.
-- 🗂 **Root Control Configuration**: Auto-generates `<staticDir>/overlay.config.json` to manage enabled/disabled status and metadata for all overlays and shared libraries.
-- 📁 **Centralized Root Libs**: Ensures `<staticDir>/libs` exists on setup and automatically installs shared libraries there for all overlays to use.
-- 📄 **Native `meta.yaml` Support**: First-class parsing of `meta.yaml` / `meta.yml` manifest files (as used across `dethz-tools` overlays).
-- 📥 **Install Overlays from Git**: Clone and set up overlays directly into the static overlays directory using full URLs or GitHub shorthands (e.g. `dethz-live-tools/dethz-overlay-vertical`). If an overlay already exists, `install` automatically pulls the latest changes.
+- ⚙️ **Persistent Tool Configuration**: Store the static folder path in `overlay.config.json`, `overlay.config.yaml`, or `.overlayrc`.
+- 🗂 **Root Control Configuration**: Auto-generates and synchronizes `<staticDir>/overlay.config.json` to manage enabled/disabled states and metadata for all overlays and shared libraries.
+- 📁 **Centralized Root Libs**: Ensures `<staticDir>/libs` exists on setup and automatically installs/updates shared libraries there for all overlays to use.
+- 📄 **Native `meta.yaml` Support**: First-class parsing of `meta.yaml` / `meta.yml` manifest files (as used across `dethz-live-tools` overlays).
+- 📥 **Install Overlays from Git**: Clone and set up overlays directly into the static overlays directory using full URLs or GitHub shorthands (e.g. `dethz-live-tools/dethz-overlay-vertical`). If an overlay already exists, `install` automatically pulls latest changes.
 - 🔄 **Git Pull & Update**: Pull latest upstream git changes for a single overlay or update all git-based overlays simultaneously via `overlay-manager pull` (alias `update`).
 - 🩺 **Health & Dependency Checking**: Verify entrypoint files (`index.html`), `meta.yaml` manifests, preview images, and required target libraries.
-- 📦 **Target Library Installer**: Automatically fetch and install CDN scripts, Git sub-repositories (such as `dethz-lib`), or vendor files needed by overlays, automatically pulling latest updates for existing git libs.
+- 📦 **Target Library Installer**: Automatically fetch and install CDN scripts, Git sub-repositories (such as `dethz-lib`), or vendor files needed by overlays, automatically pulling latest updates for existing git libs with canonical name deduplication.
 - 🔍 **Smart HTML Dependency Detection**: Automatically detects `./libs/<name>` references in `index.html` even if not declared in `meta.yaml`.
 - 📋 **List & Inspect**: Overview of all installed overlays and separate listing for shared libraries in `<static folder>/libs`, displaying active/enabled status.
 - 📚 **Programmatic API**: Full TypeScript library exports for integration into server backends or build pipelines.
-- ⚡️ **Dual Distribution**: Runnable via `bunx` / `npx` (`dist/cli.mjs`) or standalone native binary (`build/overlay-manager`).
+- ⚡️ **Dual Distribution**: Runnable via Node/Bun (`dist/cli.mjs`) or standalone single-file binary (`build/overlay-manager`).
 
 ---
 
-## Configuration (`overlay.config.json` / `overlay.config.yaml`)
+## Configuration Architecture
 
-You can persist the path to your static overlays directory so you never have to pass `--staticDir` or `-s`:
+`overlay-manager` uses a clean two-level configuration design:
 
+### 1. Tool Configuration (Project / Workspace Root)
+
+Defines where your static assets live (`staticDir`), so you never need to repeatedly pass `--staticDir` or `-s`:
+
+**`overlay.config.json`**:
 ```json
 {
-  "staticDir": "./static"
+  "staticDir": "../stream-overlay-socket/static"
 }
 ```
 
-Or in `overlay.config.yaml`:
-
+Or in **`overlay.config.yaml`**:
 ```yaml
 staticDir: "../stream-overlay-socket/static"
 ```
 
-### Static Directory Resolution Precedence
-
+#### Static Directory Resolution Precedence
 1. CLI flag: `--staticDir` / `-s`
 2. Environment variable: `STATIC_DIR` or `OVERLAY_STATIC_DIR`
 3. Configuration file: `overlay.config.json`, `overlay.config.yaml`, or `.overlayrc`
 4. Default fallback: `./static`
+
+### 2. Root Control Configuration (`<staticDir>/overlay.config.json`)
+
+Created and managed in the root of the static directory by `overlay-manager setup` or `overlay-manager install`. This file acts as the source of truth for all installed overlays and shared libraries:
+
+```json
+{
+  "overlays": {
+    "dethz-overlay-vertical": {
+      "enabled": true,
+      "name": "deth'z overlay vertical",
+      "entry": "index.html",
+      "manifestFile": "meta.yaml",
+      "gitUrl": "https://github.com/dethz-live-tools/dethz-overlay-vertical.git",
+      "updatedAt": "2026-10-07T11:00:00.000Z"
+    }
+  },
+  "libs": {
+    "dethz-lib": {
+      "enabled": true,
+      "source": "https://github.com/dethz-live-tools/dethz-lib.git",
+      "updatedAt": "2026-10-07T11:00:00.000Z"
+    }
+  }
+}
+```
 
 ---
 
@@ -69,6 +107,7 @@ bun run typecheck
 ---
 
 ## CLI Usage
+
 ### 1. Setup Static Workspace & Libs (`setup` / `init`)
 
 Initializes the static root directory, ensures `<staticDir>/libs` exists, generates `<staticDir>/overlay.config.json` for controlling overlays and libs, and downloads missing libraries:
@@ -100,9 +139,9 @@ overlay-manager config set staticDir ./static
 overlay-manager config set staticDir ../stream-overlay-socket/static
 ```
 
-### 3. Install an Overlay from Git
+### 3. Install an Overlay from Git (`install`)
 
-Clones an overlay repository into `<staticDir>/<name>`:
+Clones an overlay repository into `<staticDir>/<name>`, verifies root `<staticDir>/libs`, downloads any required target libraries into `<staticDir>/libs`, and registers the overlay in `<staticDir>/overlay.config.json`:
 
 ```bash
 # Using GitHub shorthand
@@ -138,7 +177,7 @@ overlay-manager update dethz-overlay-vertical
 overlay-manager pull dethz-overlay-vertical -b main
 ```
 
-### 5. Check Overlays
+### 5. Check Overlays (`check`)
 
 Inspects installed overlays, checks entry files, validates preview images, and reports missing libraries:
 
@@ -150,9 +189,9 @@ overlay-manager check
 overlay-manager check dethz-overlay-vertical
 ```
 
-### 6. Install Target Libraries
+### 6. Install Target Libraries (`install-libs`)
 
-Downloads and installs required libraries specified in `meta.yaml` or referenced in `index.html`:
+Downloads and installs required libraries specified in `meta.yaml` or referenced in `index.html` into `<staticDir>/libs`:
 
 ```bash
 # Install libraries for all overlays
@@ -162,9 +201,9 @@ overlay-manager install-libs
 overlay-manager install-libs dethz-overlay-vertical
 ```
 
-### 7. List Overlays & Shared Libraries
+### 7. List Overlays & Shared Libraries (`list`)
 
-Lists all installed stream overlays in the static folder, followed by a dedicated separate list of all shared libraries installed in `<static folder>/libs`:
+Lists all installed stream overlays in the static folder (with `[ENABLED]` / `[DISABLED]` badges), followed by a dedicated separate list of all shared libraries installed in `<static folder>/libs`:
 
 ```bash
 overlay-manager list
@@ -196,16 +235,15 @@ image: "src/background.png"
 author: "dethz"
 entry: "index.html"
 libs:
-  # Shorthand for dethz-live-tools Git repo (clones to libs/dethz-lib)
+  # Shorthand for dethz-live-tools Git repo (clones to <staticDir>/libs/dethz-lib)
   - dethz-lib
 
-  # Direct script URL (downloads to libs/socket.io.min.js)
+  # Direct script URL (downloads to <staticDir>/libs/socket.io.min.js)
   - "https://cdn.socket.io/4.7.5/socket.io.min.js"
 
-  # Explicit Git or custom path configuration
+  # Explicit Git configuration
   - name: "custom-lib"
     git: "https://github.com/user/custom-lib.git"
-    targetPath: "libs/custom-lib"
 ```
 
 ---
@@ -214,6 +252,10 @@ libs:
 
 ```typescript
 import {
+  setupStaticRoot,
+  ensureStaticRoot,
+  loadRootStaticConfig,
+  saveRootStaticConfig,
   loadAppConfig,
   saveAppConfig,
   resolveStaticDir,
@@ -224,23 +266,34 @@ import {
   pullOverlay,
   pullAllOverlays,
   installAllTargetLibs,
+  installOverlayLibs,
 } from "overlay-manager";
 
-// Get or update configuration
-const { config, filePath } = loadAppConfig();
+// 1. Setup static workspace & libs directory
+await setupStaticRoot({ staticDir: "./static" });
+
+// 2. Read or modify tool configuration
+const { config } = loadAppConfig();
 saveAppConfig({ staticDir: "./static" });
 
-// Resolves path considering CLI flag, env, config file, and defaults
-const staticDir = resolveStaticDir();
+// 3. Inspect root control config (enabled / disabled status)
+const { config: rootConfig } = loadRootStaticConfig("./static");
 
-// Discover all installed overlays and shared libs
+// 4. Discover all installed overlays and shared libs
+const staticDir = resolveStaticDir();
 const overlays = scanOverlays(staticDir);
 const sharedLibs = scanStaticLibs(staticDir);
 
-// Check health and missing dependencies
+// 5. Check overlay health and missing dependencies
 const results = checkAllOverlays(staticDir);
 
-// Pull latest changes for an overlay or all overlays
+// 6. Pull updates
 await pullOverlay("dethz-overlay-vertical");
 await pullAllOverlays();
 ```
+
+---
+
+## License
+
+MIT © [dethz-live-tools](https://github.com/dethz-live-tools)
