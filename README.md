@@ -4,6 +4,7 @@ A dedicated CLI tool and library for managing [stream-overlay-socket](https://gi
 
 ## Features
 
+- 🛠 **CLI Framework**: Built with **yargs**, styled with **chalk**, and featuring interactive terminal prompts powered by **@inquirer/prompts**.
 - ⚙️ **Persistent Configuration**: Store the static folder path in `overlay.config.json`, `overlay.config.yaml`, or `.overlayrc`.
 - 📄 **Native `meta.yaml` Support**: First-class parsing of `meta.yaml` / `meta.yml` manifest files (as used across `dethz-tools` overlays).
 - 📥 **Install Overlays from Git**: Clone and set up overlays directly into the static overlays directory using full URLs or GitHub shorthands (e.g. `dethz-live-tools/dethz-overlay-vertical`).

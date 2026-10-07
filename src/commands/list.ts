@@ -1,7 +1,8 @@
-import { defineCommand } from "citty";
-import { consola } from "consola";
+import chalk from "chalk";
 import { join } from "node:path";
+import type { CommandModule } from "yargs";
 import { resolveStaticDir } from "../core/config";
+import { log, printBox } from "../core/logger";
 import { scanOverlays, scanStaticLibs } from "../core/scanner";
 
 function formatFileSize(bytes?: number): string {
@@ -11,61 +12,66 @@ function formatFileSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export const listCommand = defineCommand({
-  meta: {
-    name: "list",
-    description: "List all stream overlays and shared static libraries in the static directory",
-  },
-  args: {
-    staticDir: {
-      type: "string",
-      description: "Static directory path (default: env STATIC_DIR or ./static)",
+export interface ListArgs {
+  staticDir?: string;
+}
+
+export const listCommand: CommandModule<{}, ListArgs> = {
+  command: "list",
+  describe: "List all stream overlays and shared static libraries in the static directory",
+  builder: (yargs) =>
+    yargs.option("staticDir", {
       alias: "s",
-    },
-  },
-  run({ args }) {
-    const overlays = scanOverlays(args.staticDir);
-    const staticLibs = scanStaticLibs(args.staticDir);
-    const staticLibsPath = join(resolveStaticDir(args.staticDir), "libs");
+      type: "string",
+      describe: "Static directory path (default: config, env STATIC_DIR, or ./static)",
+    }),
+  handler: (argv) => {
+    const overlays = scanOverlays(argv.staticDir);
+    const staticLibs = scanStaticLibs(argv.staticDir);
+    const staticLibsPath = join(resolveStaticDir(argv.staticDir), "libs");
 
     // 1. Display Installed Stream Overlays
     if (overlays.length === 0) {
-      consola.warn("No overlays found in static directory.");
+      log.warn("No overlays found in static directory.");
     } else {
-      consola.box({
-        title: `Installed Stream Overlays (${overlays.length})`,
-        message: overlays
+      printBox(
+        `Installed Stream Overlays (${overlays.length})`,
+        overlays
           .map((o) => {
+            const statusStr = o.isValid
+              ? chalk.green("Healthy")
+              : chalk.red(`Issues (${o.missingLibs.length} missing: ${o.missingLibs.join(", ")})`);
+
             const lines = [
-              `• ${o.name} (id: ${o.id})`,
-              o.description ? `  Description: ${o.description}` : null,
-              `  Path: ${o.path}`,
-              `  Entry: ${o.entryFile} (${o.hasEntry ? "found" : "missing"})`,
-              o.manifestFile ? `  Manifest: ${o.manifestFile}` : null,
-              o.image ? `  Image: ${o.image} (${o.hasImage ? "found" : "missing"})` : null,
-              `  Status: ${o.isValid ? "Healthy" : `Issues (${o.missingLibs.length} missing libs: ${o.missingLibs.join(", ")})`}`,
+              `• ${chalk.bold.white(o.name)} ${chalk.dim(`(id: ${o.id})`)}`,
+              o.description ? `  Description: ${chalk.dim(o.description)}` : null,
+              `  Path: ${chalk.dim(o.path)}`,
+              `  Entry: ${o.entryFile} ${o.hasEntry ? chalk.green("(found)") : chalk.red("(missing)")}`,
+              o.manifestFile ? `  Manifest: ${chalk.cyan(o.manifestFile)}` : null,
+              o.image ? `  Image: ${o.image} ${o.hasImage ? chalk.green("(found)") : chalk.yellow("(missing)")}` : null,
+              `  Status: ${statusStr}`,
             ].filter(Boolean);
             return lines.join("\n");
           })
-          .join("\n\n"),
-      });
+          .join("\n\n")
+      );
     }
 
     // 2. Display Shared Libraries in <static folder>/libs
     if (staticLibs.length === 0) {
-      consola.info(`No shared libraries found in: ${staticLibsPath}`);
+      log.info(`No shared libraries found in: ${chalk.dim(staticLibsPath)}`);
     } else {
-      consola.box({
-        title: `Shared Libraries in static/libs (${staticLibs.length})`,
-        message: staticLibs
+      printBox(
+        `Shared Libraries in static/libs (${staticLibs.length})`,
+        staticLibs
           .map((lib) => {
             const metaStr = lib.isDirectory
-              ? `directory, ${lib.filesCount ?? 0} files`
-              : `file, ${formatFileSize(lib.sizeBytes)}`;
-            return `• ${lib.name} (${metaStr})\n  Path: ${lib.path}`;
+              ? chalk.cyan(`directory, ${lib.filesCount ?? 0} files`)
+              : chalk.yellow(`file, ${formatFileSize(lib.sizeBytes)}`);
+            return `• ${chalk.bold.white(lib.name)} (${metaStr})\n  Path: ${chalk.dim(lib.path)}`;
           })
-          .join("\n\n"),
-      });
+          .join("\n\n")
+      );
     }
   },
-});
+};

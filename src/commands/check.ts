@@ -1,59 +1,62 @@
-import { defineCommand } from "citty";
-import { consola } from "consola";
+import chalk from "chalk";
+import type { CommandModule } from "yargs";
 import { checkAllOverlays } from "../core/checker";
+import { log } from "../core/logger";
 
-export const checkCommand = defineCommand({
-  meta: {
-    name: "check",
-    description: "Check overlay status, entrypoint files, and required target libraries",
-  },
-  args: {
-    name: {
-      type: "positional",
-      description: "Specific overlay name to check (checks all if omitted)",
-      required: false,
-    },
-    staticDir: {
-      type: "string",
-      description: "Static directory path (default: env STATIC_DIR or ./static)",
-      alias: "s",
-    },
-  },
-  run({ args }) {
-    consola.start("Checking stream overlays...");
-    const results = checkAllOverlays(args.staticDir, args.name);
+export interface CheckArgs {
+  name?: string;
+  staticDir?: string;
+}
+
+export const checkCommand: CommandModule<{}, CheckArgs> = {
+  command: "check [name]",
+  describe: "Check overlay status, entrypoint files, and required target libraries",
+  builder: (yargs) =>
+    yargs
+      .positional("name", {
+        type: "string",
+        describe: "Specific overlay name to check (checks all if omitted)",
+      })
+      .option("staticDir", {
+        alias: "s",
+        type: "string",
+        describe: "Static directory path (default: config, env STATIC_DIR, or ./static)",
+      }),
+  handler: (argv) => {
+    log.start("Checking stream overlays...");
+    const results = checkAllOverlays(argv.staticDir, argv.name);
 
     if (results.length === 0) {
-      consola.warn("No overlays found in static directory.");
+      log.warn("No overlays found in static directory.");
       return;
     }
 
     let hasErrors = false;
 
     for (const res of results) {
-      const manifestLabel = res.manifestFile ? `[${res.manifestFile}]` : "[no manifest]";
+      const manifestLabel = res.manifestFile ? chalk.dim(`[${res.manifestFile}]`) : chalk.dim("[no manifest]");
       if (res.isValid) {
-        consola.success(`[VALID] ${res.name} ${manifestLabel}`);
+        log.success(`${chalk.green.bold("[VALID]")} ${chalk.bold(res.name)} ${manifestLabel}`);
         if (res.description) {
-          consola.log(`  └─ Description: ${res.description}`);
+          console.log(`  └─ ${chalk.dim("Description:")} ${res.description}`);
         }
       } else {
         hasErrors = true;
-        consola.error(`[INVALID] ${res.name} ${manifestLabel}`);
+        log.error(`${chalk.red.bold("[INVALID]")} ${chalk.bold(res.name)} ${manifestLabel}`);
         if (res.description) {
-          consola.log(`  └─ Description: ${res.description}`);
+          console.log(`  └─ ${chalk.dim("Description:")} ${res.description}`);
         }
         for (const issue of res.issues) {
-          consola.log(`  └─ ⚠️  ${issue}`);
+          console.log(`  └─ ${chalk.yellow("⚠️")}  ${issue}`);
         }
       }
     }
 
     if (hasErrors) {
-      consola.warn("Some overlays require attention. Run 'overlay-manager install-libs' to resolve missing libraries.");
+      log.warn("Some overlays require attention. Run 'overlay-manager install-libs' to resolve missing libraries.");
       process.exitCode = 1;
     } else {
-      consola.success(`All ${results.length} checked overlays are healthy and ready!`);
+      log.success(`All ${results.length} checked overlays are healthy and ready!`);
     }
   },
-});
+};

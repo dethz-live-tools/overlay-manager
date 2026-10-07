@@ -1,6 +1,6 @@
 {
   "name": "overlay-manager",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "CLI tool for stream overlay management",
   "type": "module",
   "main": "./dist/index.mjs",
@@ -28,13 +28,12 @@
   "dependencies": {
     "@inquirer/prompts": "^8.7.3",
     "chalk": "^6.0.1",
-    "citty": "^0.2.2",
-    "consola": "^3.4.2",
     "yaml": "^2.9.1",
     "yargs": "^18.2.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/yargs": "^17.0.35",
     "typescript": "^7.0.2"
   }
 }

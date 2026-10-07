@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import {
-  mainCommand,
+  createCli,
+  installCommand,
+  checkCommand,
+  installLibsCommand,
+  listCommand,
+  configCommand,
   version,
   resolveStaticDir,
   readOverlayManifest,
@@ -13,23 +18,18 @@ import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 describe("overlay-manager CLI & Library", () => {
-  it("defines main command metadata and version", async () => {
-    const meta = typeof mainCommand.meta === "function" ? await mainCommand.meta() : await mainCommand.meta;
-    expect(meta?.name).toBe("overlay-manager");
-    expect(meta?.version).toBe(version);
+  it("initializes yargs CLI and version", () => {
+    const cli = createCli(["--help"]);
+    expect(cli).toBeDefined();
+    expect(version).toBeDefined();
   });
 
-  it("registers dedicated subcommands", async () => {
-    const subCommands = typeof mainCommand.subCommands === "function"
-      ? await (mainCommand.subCommands as Function)()
-      : await mainCommand.subCommands;
-
-    const resolved = (subCommands || {}) as Record<string, any>;
-    expect(resolved.config).toBeDefined();
-    expect(resolved.install).toBeDefined();
-    expect(resolved.check).toBeDefined();
-    expect(resolved["install-libs"]).toBeDefined();
-    expect(resolved.list).toBeDefined();
+  it("registers dedicated subcommands", () => {
+    expect(configCommand.command).toContain("config");
+    expect(installCommand.command).toContain("install");
+    expect(checkCommand.command).toContain("check");
+    expect(installLibsCommand.command).toContain("install-libs");
+    expect(listCommand.command).toContain("list");
   });
 
   it("extracts and normalizes git repository names", () => {
