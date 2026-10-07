@@ -1,0 +1,14 @@
+{
+  "formats": [
+    "agents"
+  ],
+  "installedRules": [
+    "rules/kizuna-inc/kz-rule:99521e5/rules/release-note.md",
+    "rules/kizuna-inc/kz-rule:99521e5/rules/use-bun.md",
+    "rules/kizuna-inc/kz-rule:99521e5/rules/version-bump.md"
+  ],
+  "installedSkills": [
+    "skill/kizuna-inc/kz-skill:7bcb366/released-bump",
+    "skill/kizuna-inc/kz-skill:7bcb366/workspace-allow"
+  ]
+}
