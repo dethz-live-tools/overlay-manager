@@ -4,6 +4,7 @@ import type { CommandModule } from "yargs";
 import { cloneOverlayFromGit } from "../core/git";
 import { installOverlayLibs } from "../core/libs";
 import { log } from "../core/logger";
+import { ensureStaticRoot, registerOverlayInRootConfig } from "../core/root-config";
 
 export interface InstallArgs {
   gitUrl?: string;
@@ -58,6 +59,9 @@ export const installCommand: CommandModule<{}, InstallArgs> = {
       return;
     }
 
+    // Ensure root static directory and root libs directory exist
+    ensureStaticRoot(argv.staticDir);
+
     log.start(`Cloning overlay from ${chalk.cyan(gitUrl)}...`);
 
     const result = await cloneOverlayFromGit({
@@ -73,13 +77,20 @@ export const installCommand: CommandModule<{}, InstallArgs> = {
       return;
     }
 
-    log.success(`Successfully installed overlay '${chalk.bold(result.name)}' at: ${chalk.dim(result.destPath)}`);
+    // Register overlay in root static overlay.config.json
+    registerOverlayInRootConfig(result.name, { enabled: true, entry: "index.html", gitUrl }, argv.staticDir);
+
+    if (result.isUpdate) {
+      log.success(`Successfully updated existing overlay '${chalk.bold(result.name)}' via git pull at: ${chalk.dim(result.destPath)}`);
+    } else {
+      log.success(`Successfully installed overlay '${chalk.bold(result.name)}' at: ${chalk.dim(result.destPath)}`);
+    }
 
     if (!argv.skipLibs) {
-      log.info("Checking for required target libraries...");
-      const libResult = await installOverlayLibs(result.destPath, result.name);
+      log.info("Checking for required target libraries in root libs folder...");
+      const libResult = await installOverlayLibs(result.destPath, result.name, argv.staticDir);
       if (libResult.installed.length > 0) {
-        log.success(`Installed ${libResult.installed.length} target libraries: ${libResult.installed.map((l) => chalk.cyan(l.lib)).join(", ")}`);
+        log.success(`Installed/verified ${libResult.installed.length} target libraries in root libs: ${libResult.installed.map((l) => chalk.cyan(l.lib)).join(", ")}`);
       }
       if (libResult.failed.length > 0) {
         log.warn(`Failed to install ${libResult.failed.length} libraries: ${libResult.failed.map((f) => `${f.lib} (${f.reason})`).join(", ")}`);

@@ -42,8 +42,10 @@ export const listCommand: CommandModule<{}, ListArgs> = {
               ? chalk.green("Healthy")
               : chalk.red(`Issues (${o.missingLibs.length} missing: ${o.missingLibs.join(", ")})`);
 
+            const enabledBadge = o.enabled !== false ? chalk.green("[ENABLED]") : chalk.gray("[DISABLED]");
+
             const lines = [
-              `• ${chalk.bold.white(o.name)} ${chalk.dim(`(id: ${o.id})`)}`,
+              `• ${chalk.bold.white(o.name)} ${chalk.dim(`(id: ${o.id})`)} ${enabledBadge}`,
               o.description ? `  Description: ${chalk.dim(o.description)}` : null,
               `  Path: ${chalk.dim(o.path)}`,
               `  Entry: ${o.entryFile} ${o.hasEntry ? chalk.green("(found)") : chalk.red("(missing)")}`,
@@ -68,7 +70,8 @@ export const listCommand: CommandModule<{}, ListArgs> = {
             const metaStr = lib.isDirectory
               ? chalk.cyan(`directory, ${lib.filesCount ?? 0} files`)
               : chalk.yellow(`file, ${formatFileSize(lib.sizeBytes)}`);
-            return `• ${chalk.bold.white(lib.name)} (${metaStr})\n  Path: ${chalk.dim(lib.path)}`;
+            const enabledBadge = lib.enabled !== false ? chalk.green("[ENABLED]") : chalk.gray("[DISABLED]");
+            return `• ${chalk.bold.white(lib.name)} ${enabledBadge} (${metaStr})\n  Path: ${chalk.dim(lib.path)}`;
           })
           .join("\n\n")
       );

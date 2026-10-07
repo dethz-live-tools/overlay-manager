@@ -29,6 +29,7 @@ export interface OverlayInfo {
   manifestFile?: string; // e.g. "meta.yaml", "overlay.json"
   hasManifest: boolean;
   isValid: boolean;
+  enabled?: boolean;
   missingLibs: string[];
   detectedLibs: string[];
 }
@@ -37,6 +38,7 @@ export interface StaticLibInfo {
   name: string;
   path: string;
   isDirectory: boolean;
+  enabled?: boolean;
   sizeBytes?: number;
   filesCount?: number;
 }
@@ -44,6 +46,43 @@ export interface StaticLibInfo {
 export interface AppConfig {
   staticDir?: string;
   [key: string]: any;
+}
+
+export interface RootOverlayItem {
+  enabled: boolean;
+  name?: string;
+  entry?: string;
+  manifestFile?: string;
+  gitUrl?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
+export interface RootLibItem {
+  enabled: boolean;
+  source?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
+export interface RootStaticConfig {
+  overlays?: Record<string, RootOverlayItem>;
+  libs?: Record<string, RootLibItem>;
+  [key: string]: any;
+}
+
+export interface SetupOptions {
+  staticDir?: string;
+  downloadLibs?: boolean;
+}
+
+export interface SetupResult {
+  staticDir: string;
+  libsDir: string;
+  configPath: string;
+  overlaysConfigured: number;
+  libsConfigured: number;
+  libsInstalled: number;
 }
 
 export interface InstallOverlayOptions {
@@ -58,8 +97,23 @@ export interface InstallResult {
   success: boolean;
   name: string;
   destPath: string;
+  isUpdate?: boolean;
   installedLibs?: string[];
   error?: string;
+}
+
+export interface PullOverlayOptions {
+  name?: string;
+  staticDir?: string;
+  branch?: string;
+}
+
+export interface PullResult {
+  name: string;
+  path: string;
+  success: boolean;
+  status: "updated" | "up-to-date" | "failed" | "not-git";
+  message?: string;
 }
 
 export interface CheckResult {

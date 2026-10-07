@@ -3,6 +3,7 @@ import chalk from "chalk";
 import type { CommandModule } from "yargs";
 import { loadAppConfig, resolveStaticDir, saveAppConfig } from "../core/config";
 import { log, printBox } from "../core/logger";
+import { loadRootStaticConfig } from "../core/root-config";
 
 export interface ConfigArgs {
   action?: string;
@@ -92,12 +93,14 @@ export const configCommand: CommandModule<{}, ConfigArgs> = {
 
     // Show full configuration overview
     const resolvedStatic = resolveStaticDir(undefined, argv.file);
+    const rootConfigInfo = loadRootStaticConfig();
     printBox(
       "Overlay Manager Configuration",
       [
-        `Config File: ${filePath ? chalk.cyan(filePath) : chalk.yellow("(No config file found - using defaults)")}`,
+        `Config File:            ${filePath ? chalk.cyan(filePath) : chalk.yellow("(No config file found - using defaults)")}`,
         `staticDir (configured): ${config.staticDir ? chalk.bold(config.staticDir) : chalk.dim("(not set)")}`,
         `staticDir (resolved):   ${chalk.green(resolvedStatic)}`,
+        `Root Control Config:    ${rootConfigInfo.exists ? chalk.green(rootConfigInfo.filePath) : chalk.dim(`${rootConfigInfo.filePath} (not created)`) }`,
         Object.keys(config).length > 1
           ? `\nOther settings:\n${chalk.dim(JSON.stringify(config, null, 2))}`
           : null,

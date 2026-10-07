@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import type { OverlayInfo, OverlayManifest, StaticLibInfo } from "../types";
 import { resolveOverlaysDir, resolveStaticDir } from "./config";
+import { normalizeLibName } from "./libs";
+import { loadRootStaticConfig } from "./root-config";
 
 export function readOverlayManifest(overlayDir: string): { manifest?: OverlayManifest; manifestFile?: string } {
   const possibleFiles = ["meta.yaml", "meta.yml", "overlay.json", "manifest.json", "package.json"];
@@ -90,18 +92,21 @@ export function getOverlayInfo(overlayPath: string, overlayId?: string, customDi
   // 1. Check explicit libs in manifest
   if (manifest?.libs && Array.isArray(manifest.libs)) {
     for (const lib of manifest.libs) {
-      const libName = typeof lib === "string" ? lib : lib.name;
+      const rawName = typeof lib === "string" ? lib : lib.name;
+      const canonicalName = normalizeLibName(rawName);
       const targetPath = typeof lib === "object" && lib.targetPath
         ? join(overlayPath, lib.targetPath)
-        : join(overlayPath, "libs", typeof lib === "string" ? lib.split("/").pop() || lib : lib.name);
+        : join(overlayPath, "libs", canonicalName);
 
-      detectedLibs.push(libName);
+      if (!detectedLibs.includes(canonicalName)) {
+        detectedLibs.push(canonicalName);
+      }
 
-      const inOverlay = existsSync(targetPath);
-      const inStatic = existsSync(join(staticLibsDir, libName));
+      const inOverlay = existsSync(targetPath) || existsSync(join(overlayPath, "libs", canonicalName));
+      const inStatic = existsSync(join(staticLibsDir, canonicalName)) || existsSync(join(staticLibsDir, rawName));
 
-      if (!inOverlay && !inStatic) {
-        missingLibs.push(libName);
+      if (!inOverlay && !inStatic && !missingLibs.includes(canonicalName)) {
+        missingLibs.push(canonicalName);
       }
     }
   }
@@ -111,15 +116,17 @@ export function getOverlayInfo(overlayPath: string, overlayId?: string, customDi
     try {
       const htmlContent = readFileSync(entryPath, "utf-8");
       const htmlLibs = detectLibsFromHtml(htmlContent);
-      for (const lib of htmlLibs) {
-        if (!detectedLibs.includes(lib)) {
-          detectedLibs.push(lib);
-          const libInOverlay = existsSync(join(overlayPath, "libs", lib));
-          const libInStatic = existsSync(join(staticLibsDir, lib));
+      for (const rawLib of htmlLibs) {
+        const canonical = normalizeLibName(rawLib);
+        if (!detectedLibs.includes(canonical)) {
+          detectedLibs.push(canonical);
+        }
 
-          if (!libInOverlay && !libInStatic) {
-            missingLibs.push(lib);
-          }
+        const libInOverlay = existsSync(join(overlayPath, "libs", rawLib)) || existsSync(join(overlayPath, "libs", canonical));
+        const libInStatic = existsSync(join(staticLibsDir, rawLib)) || existsSync(join(staticLibsDir, canonical));
+
+        if (!libInOverlay && !libInStatic && !missingLibs.includes(canonical)) {
+          missingLibs.push(canonical);
         }
       }
     } catch {
@@ -128,6 +135,8 @@ export function getOverlayInfo(overlayPath: string, overlayId?: string, customDi
   }
 
   const isValid = hasEntry && missingLibs.length === 0;
+  const rootConfig = loadRootStaticConfig(customDir).config;
+  const enabled = rootConfig.overlays?.[id]?.enabled !== false;
 
   return {
     id,
@@ -142,6 +151,7 @@ export function getOverlayInfo(overlayPath: string, overlayId?: string, customDi
     manifestFile,
     hasManifest,
     isValid,
+    enabled,
     missingLibs,
     detectedLibs,
   };
@@ -176,6 +186,7 @@ export function scanStaticLibs(customDir?: string): StaticLibInfo[] {
 
   const entries = readdirSync(libsDir, { withFileTypes: true });
   const libs: StaticLibInfo[] = [];
+  const rootConfig = loadRootStaticConfig(customDir).config;
 
   for (const entry of entries) {
     if (entry.name.startsWith(".")) {
@@ -184,6 +195,7 @@ export function scanStaticLibs(customDir?: string): StaticLibInfo[] {
 
     const fullPath = join(libsDir, entry.name);
     const isDirectory = entry.isDirectory();
+    const enabled = rootConfig.libs?.[entry.name]?.enabled !== false;
 
     let filesCount: number | undefined;
     let sizeBytes: number | undefined;
@@ -206,6 +218,7 @@ export function scanStaticLibs(customDir?: string): StaticLibInfo[] {
       name: entry.name,
       path: fullPath,
       isDirectory,
+      enabled,
       filesCount,
       sizeBytes,
     });

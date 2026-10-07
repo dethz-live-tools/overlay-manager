@@ -5,6 +5,8 @@ import { configCommand } from "./commands/config";
 import { installCommand } from "./commands/install";
 import { installLibsCommand } from "./commands/install-libs";
 import { listCommand } from "./commands/list";
+import { pullCommand } from "./commands/pull";
+import { setupCommand } from "./commands/setup";
 import { version } from "./version";
 
 // Export Core Library APIs
@@ -18,14 +20,34 @@ export {
   resolveStaticDir,
   saveAppConfig,
 } from "./core/config";
+export {
+  ensureStaticRoot,
+  getRootStaticConfigPath,
+  loadRootStaticConfig,
+  registerLibInRootConfig,
+  registerOverlayInRootConfig,
+  saveRootStaticConfig,
+  setLibEnabled,
+  setOverlayEnabled,
+} from "./core/root-config";
+export { setupStaticRoot } from "./core/setup";
 export { getOverlayInfo, readOverlayManifest, scanOverlays, scanStaticLibs } from "./core/scanner";
 export { checkAllOverlays, checkOverlay } from "./core/checker";
-export { cloneOverlayFromGit } from "./core/git";
-export { installAllTargetLibs, installOverlayLibs } from "./core/libs";
+export {
+  cloneOverlayFromGit,
+  extractRepoName,
+  isGitRepo,
+  normalizeGitUrl,
+  pullAllOverlays,
+  pullGitRepo,
+  pullOverlay,
+  runGitCommand,
+} from "./core/git";
+export { installAllTargetLibs, installOverlayLibs, normalizeLibName } from "./core/libs";
 export { log, printBox } from "./core/logger";
 
 // Export Subcommands
-export { checkCommand, configCommand, installCommand, installLibsCommand, listCommand };
+export { checkCommand, configCommand, installCommand, installLibsCommand, listCommand, pullCommand, setupCommand };
 
 // Build and configure Yargs CLI instance
 export function createCli(args: string[] = hideBin(process.argv)) {
@@ -33,7 +55,9 @@ export function createCli(args: string[] = hideBin(process.argv)) {
     .scriptName("overlay-manager")
     .version(version)
     .usage("$0 <command> [options]")
+    .command(setupCommand)
     .command(installCommand)
+    .command(pullCommand)
     .command(checkCommand)
     .command(installLibsCommand)
     .command(listCommand)

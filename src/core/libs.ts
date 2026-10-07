@@ -1,31 +1,31 @@
-import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import type { InstallLibsOptions, InstallLibsResult, TargetLibConfig } from "../types";
-import { resolveOverlaysDir } from "./config";
-import { normalizeGitUrl } from "./git";
+import { resolveOverlaysDir, resolveStaticDir } from "./config";
+import { isGitRepo, normalizeGitUrl, pullGitRepo, runGitCommand } from "./git";
+import { ensureStaticRoot, registerLibInRootConfig } from "./root-config";
 import { getOverlayInfo, scanOverlays } from "./scanner";
 
-function runGitClone(gitUrl: string, destPath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const parent = dirname(destPath);
-    if (!existsSync(parent)) {
-      mkdirSync(parent, { recursive: true });
-    }
-    const proc = spawn("git", ["clone", "--depth", "1", gitUrl, destPath], { stdio: ["ignore", "pipe", "pipe"] });
-    let stderr = "";
-    proc.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    proc.on("error", (err) => reject(err));
-    proc.on("close", (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`Git clone failed (exit code ${code}): ${stderr.trim()}`));
-      }
-    });
-  });
+export function normalizeLibName(input: string): string {
+  const trimmed = input.trim();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    const clean = (trimmed.split("?")[0] || "").replace(/\/+$/, "");
+    const last = clean.split("/").filter(Boolean).pop() || "lib";
+    return last.replace(/\.git$/, "");
+  }
+  const parts = trimmed.split("/").filter(Boolean);
+  return parts.pop()?.replace(/\.git$/, "") || trimmed;
+}
+
+async function runGitClone(gitUrl: string, destPath: string): Promise<void> {
+  const parent = dirname(destPath);
+  if (!existsSync(parent)) {
+    mkdirSync(parent, { recursive: true });
+  }
+  const result = await runGitCommand(["clone", "--depth", "1", gitUrl, destPath]);
+  if (result.code !== 0) {
+    throw new Error(`Git clone failed (exit code ${result.code}): ${result.stderr.trim() || result.stdout.trim()}`);
+  }
 }
 
 async function downloadFile(url: string, targetPath: string): Promise<void> {
@@ -41,87 +41,117 @@ async function downloadFile(url: string, targetPath: string): Promise<void> {
   writeFileSync(targetPath, Buffer.from(arrayBuffer));
 }
 
-export async function installOverlayLibs(overlayPath: string, overlayName?: string): Promise<{
+export async function installOverlayLibs(
+  overlayPath: string,
+  overlayName?: string,
+  staticDir?: string
+): Promise<{
   installed: Array<{ lib: string; path: string }>;
   failed: Array<{ lib: string; reason: string }>;
 }> {
-  const info = getOverlayInfo(overlayPath, overlayName);
+  // Ensure the config root path and libs folder exist
+  const { libsDir: rootLibsDir } = ensureStaticRoot(staticDir);
+  const info = getOverlayInfo(overlayPath, overlayName, staticDir);
   const installed: Array<{ lib: string; path: string }> = [];
   const failed: Array<{ lib: string; reason: string }> = [];
 
-  // Combine explicit manifest libs and auto-detected missing libs
+  // Deduplicate libraries by normalized canonical name
   const libsToInstall = new Map<string, string | TargetLibConfig>();
 
   if (info.manifest?.libs && Array.isArray(info.manifest.libs)) {
     for (const lib of info.manifest.libs) {
-      const name = typeof lib === "string" ? lib : lib.name;
-      libsToInstall.set(name, lib);
+      const rawName = typeof lib === "string" ? lib : lib.name;
+      const canonical = typeof lib === "string" ? normalizeLibName(rawName) : rawName;
+      libsToInstall.set(canonical, lib);
     }
   }
 
   // Also include any detected missing libs (e.g. from HTML ./libs/...)
   for (const missing of info.missingLibs) {
-    if (!libsToInstall.has(missing)) {
-      libsToInstall.set(missing, missing);
+    const canonical = normalizeLibName(missing);
+    if (!libsToInstall.has(canonical)) {
+      libsToInstall.set(canonical, missing);
     }
   }
 
-  for (const [key, lib] of libsToInstall.entries()) {
-    let libName = key;
+  for (const [canonicalName, lib] of libsToInstall.entries()) {
     let url: string | undefined;
     let gitUrl: string | undefined;
     let targetPath = "";
 
     if (typeof lib === "string") {
-      libName = lib;
       if (lib.startsWith("http://") || lib.startsWith("https://")) {
         if (lib.endsWith(".git")) {
           gitUrl = lib;
-          targetPath = join(overlayPath, "libs", lib.split("/").pop()?.replace(/\.git$/, "") || "lib");
+          targetPath = join(rootLibsDir, canonicalName);
         } else {
           url = lib;
-          const filename = lib.split("/").filter(Boolean).pop()?.split("?")[0] || "lib.js";
-          targetPath = join(overlayPath, "libs", filename);
+          const filename = lib.split("/").filter(Boolean).pop()?.split("?")[0] || `${canonicalName}.js`;
+          targetPath = join(rootLibsDir, filename);
         }
       } else if (lib.includes("/")) {
         // e.g. dethz-live-tools/dethz-lib
         gitUrl = normalizeGitUrl(lib);
-        targetPath = join(overlayPath, "libs", lib.split("/").pop() || "lib");
+        targetPath = join(rootLibsDir, canonicalName);
       } else {
         // E.g. 'dethz-lib' - convention fallback to dethz-live-tools/<libName>
         gitUrl = `https://github.com/dethz-live-tools/${lib}.git`;
-        targetPath = join(overlayPath, "libs", lib);
+        targetPath = join(rootLibsDir, canonicalName);
       }
     } else {
       const config = lib as TargetLibConfig;
-      libName = config.name;
       url = config.url;
       gitUrl = config.git ? normalizeGitUrl(config.git) : undefined;
-      targetPath = config.targetPath
-        ? join(overlayPath, config.targetPath)
-        : join(overlayPath, "libs", config.name);
+      if (config.targetPath) {
+        targetPath = isAbsolute(config.targetPath)
+          ? config.targetPath
+          : join(rootLibsDir, config.targetPath.replace(/^libs\//, ""));
+      } else {
+        targetPath = join(rootLibsDir, canonicalName);
+      }
     }
 
-    if (existsSync(targetPath)) {
+    // Check if target library already exists in root libs dir or overlay local libs dir
+    const overlayLocalPath = join(overlayPath, "libs", canonicalName);
+    const existingPath = existsSync(targetPath)
+      ? targetPath
+      : existsSync(overlayLocalPath)
+      ? overlayLocalPath
+      : undefined;
+
+    if (existingPath) {
+      if (gitUrl && isGitRepo(existingPath)) {
+        try {
+          await pullGitRepo(existingPath);
+          installed.push({ lib: canonicalName, path: existingPath });
+          registerLibInRootConfig(canonicalName, { source: gitUrl, enabled: true }, staticDir);
+        } catch {
+          // If pull fails or up to date, keep going
+        }
+      } else {
+        registerLibInRootConfig(canonicalName, { source: gitUrl || url, enabled: true }, staticDir);
+      }
       continue;
     }
 
     try {
       if (gitUrl) {
         await runGitClone(gitUrl, targetPath);
-        installed.push({ lib: libName, path: targetPath });
+        installed.push({ lib: canonicalName, path: targetPath });
+        registerLibInRootConfig(canonicalName, { source: gitUrl, enabled: true }, staticDir);
       } else if (url) {
         await downloadFile(url, targetPath);
-        installed.push({ lib: libName, path: targetPath });
+        installed.push({ lib: canonicalName, path: targetPath });
+        registerLibInRootConfig(canonicalName, { source: url, enabled: true }, staticDir);
       } else {
         failed.push({
-          lib: libName,
+          lib: canonicalName,
           reason: "No download URL or git repository specified for this library",
         });
       }
     } catch (err: any) {
       failed.push({
-        lib: libName,
+        lib: canonicalName,
         reason: err?.message || String(err),
       });
     }
@@ -132,6 +162,8 @@ export async function installOverlayLibs(overlayPath: string, overlayName?: stri
 
 export async function installAllTargetLibs(options: InstallLibsOptions = {}): Promise<InstallLibsResult> {
   const baseDir = resolveOverlaysDir(options.staticDir);
+  ensureStaticRoot(options.staticDir);
+
   const allInstalled: Array<{ overlay: string; lib: string; path: string }> = [];
   const allFailed: Array<{ overlay: string; lib: string; reason: string }> = [];
 
@@ -142,7 +174,7 @@ export async function installAllTargetLibs(options: InstallLibsOptions = {}): Pr
     if (overlaysToProcess.length === 0) {
       const targetPath = join(baseDir, options.overlayName);
       if (existsSync(targetPath)) {
-        overlaysToProcess = [getOverlayInfo(targetPath, options.overlayName)];
+        overlaysToProcess = [getOverlayInfo(targetPath, options.overlayName, options.staticDir)];
       } else {
         return {
           success: false,
@@ -154,7 +186,7 @@ export async function installAllTargetLibs(options: InstallLibsOptions = {}): Pr
   }
 
   for (const overlay of overlaysToProcess) {
-    const res = await installOverlayLibs(overlay.path, overlay.id);
+    const res = await installOverlayLibs(overlay.path, overlay.id, options.staticDir);
     for (const item of res.installed) {
       allInstalled.push({ overlay: overlay.name, ...item });
     }

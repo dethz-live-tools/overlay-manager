@@ -6,15 +6,25 @@ import {
   installLibsCommand,
   listCommand,
   configCommand,
+  pullCommand,
+  setupCommand,
   version,
   resolveStaticDir,
   readOverlayManifest,
   loadAppConfig,
   saveAppConfig,
+  isGitRepo,
+  normalizeLibName,
+  ensureStaticRoot,
+  loadRootStaticConfig,
+  saveRootStaticConfig,
+  registerOverlayInRootConfig,
+  registerLibInRootConfig,
+  setupStaticRoot,
 } from "../src/index";
 import { extractRepoName, normalizeGitUrl } from "../src/core/git";
 import { detectLibsFromHtml } from "../src/core/scanner";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 describe("overlay-manager CLI & Library", () => {
@@ -25,8 +35,10 @@ describe("overlay-manager CLI & Library", () => {
   });
 
   it("registers dedicated subcommands", () => {
+    expect(setupCommand.command).toContain("setup");
     expect(configCommand.command).toContain("config");
     expect(installCommand.command).toContain("install");
+    expect(pullCommand.command).toContain("pull");
     expect(checkCommand.command).toContain("check");
     expect(installLibsCommand.command).toContain("install-libs");
     expect(listCommand.command).toContain("list");
@@ -35,6 +47,18 @@ describe("overlay-manager CLI & Library", () => {
   it("extracts and normalizes git repository names", () => {
     expect(extractRepoName("https://github.com/dethz-live-tools/dethz-overlay-vertical.git")).toBe("dethz-overlay-vertical");
     expect(normalizeGitUrl("dethz-live-tools/dethz-overlay-vertical")).toBe("https://github.com/dethz-live-tools/dethz-overlay-vertical.git");
+  });
+
+  it("normalizes library names correctly", () => {
+    expect(normalizeLibName("dethz-live-tools/dethz-lib")).toBe("dethz-lib");
+    expect(normalizeLibName("dethz-lib")).toBe("dethz-lib");
+    expect(normalizeLibName("https://github.com/dethz-live-tools/dethz-lib.git")).toBe("dethz-lib");
+    expect(normalizeLibName("https://cdn.socket.io/4.7.5/socket.io.min.js")).toBe("socket.io.min.js");
+  });
+
+  it("detects git repositories properly", () => {
+    expect(isGitRepo(process.cwd())).toBe(true);
+    expect(isGitRepo("/non-existent-path-abc-123")).toBe(false);
   });
 
   it("detects libs referenced in HTML", () => {
@@ -108,5 +132,35 @@ libs:
 
     rmSync(tempJsonConfig, { force: true });
     rmSync(tempYamlConfig, { force: true });
+  });
+
+  it("manages root static overlay.config.json and libs directory", async () => {
+    const testStaticRoot = join(process.cwd(), ".tmp-test-static-root");
+
+    // 1. Ensure static root creates libs folder and overlay.config.json
+    const rootInfo = ensureStaticRoot(testStaticRoot);
+    expect(existsSync(rootInfo.staticDir)).toBe(true);
+    expect(existsSync(rootInfo.libsDir)).toBe(true);
+    expect(existsSync(rootInfo.configPath)).toBe(true);
+
+    // 2. Load root static config
+    const { config } = loadRootStaticConfig(testStaticRoot);
+    expect(config.overlays).toBeDefined();
+    expect(config.libs).toBeDefined();
+
+    // 3. Register overlay and lib in root config
+    registerOverlayInRootConfig("sample-overlay", { enabled: true, entry: "index.html" }, testStaticRoot);
+    registerLibInRootConfig("dethz-lib", { enabled: true, source: "dethz-live-tools/dethz-lib" }, testStaticRoot);
+
+    const updated = loadRootStaticConfig(testStaticRoot).config;
+    expect(updated.overlays?.["sample-overlay"]?.enabled).toBe(true);
+    expect(updated.libs?.["dethz-lib"]?.enabled).toBe(true);
+
+    // 4. Test setupStaticRoot
+    const setupRes = await setupStaticRoot({ staticDir: testStaticRoot, downloadLibs: false });
+    expect(setupRes.overlaysConfigured).toBeGreaterThanOrEqual(1);
+    expect(setupRes.libsConfigured).toBeGreaterThanOrEqual(1);
+
+    rmSync(testStaticRoot, { recursive: true, force: true });
   });
 });
