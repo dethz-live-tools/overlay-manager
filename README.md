@@ -214,13 +214,46 @@ overlay-manager list -s ./static
 
 ## Build & Distribution
 
-| Command | Output | Description |
+`overlay-manager` includes a multi-target build script (`scripts/build.ts`) that cleanly separates binary bundles into `./dist` and native OS executables into `./build`:
+
+### Interactive Build Script
+
+Running `bun run build` opens an interactive prompt allowing you to pick what to build:
+
+```bash
+bun run build
+```
+
+```text
+? What would you like to build?
+❯ 📦 Build All (JS binary in ./dist + All OS binaries in ./build)
+  🌐 JS Binary & Declarations only (to ./dist)
+  💻 Current OS Binary only (to ./build/overlay-manager)
+  🖥️ All OS Native Binaries (to ./build)
+  🎯 Custom Target Selection (choose specific targets)
+```
+
+### Direct CLI Build Commands
+
+| Command | Output Directory | Description |
 | :--- | :--- | :--- |
-| `bun run build` | `dist/cli.mjs`, `dist/index.mjs`, `dist/*.d.ts` | Builds executable CLI bundle, library bundle, and type declarations |
-| `bun run build:cli` | `dist/cli.mjs` | Builds standalone executable JS with shebang |
-| `bun run build:bin` | `build/overlay-manager` | Compiles single-file native executable |
-| `bun run build:all` | All artifacts | Builds bundles, types, and compiled binary |
-| `bun run typecheck` | - | Validates TypeScript types |
+| `bun run build` | Prompt / Interactive | Interactive target selector |
+| `bun run build:dist` | `./dist` | Builds JS CLI (`cli.mjs`), library (`index.mjs`), and TypeScript declarations (`*.d.ts`) |
+| `bun run build:os` | `./build` | Cross-compiles standalone native binaries for macOS, Linux, and Windows |
+| `bun run build:all` | `./dist` & `./build` | Builds both JS dist bundles and all OS native binaries |
+| `bun run build:bin` | `./build/overlay-manager` | Compiles single-file native executable for the current host OS |
+| `bun run typecheck` | - | Validates TypeScript type declarations |
+
+### OS Binaries Matrix (`./build`)
+
+| Target ID | Platform | Output Binary |
+| :--- | :--- | :--- |
+| `current` | Current Host System | `build/overlay-manager` |
+| `darwin-arm64` | macOS Apple Silicon (M1/M2/M3/M4) | `build/overlay-manager-darwin-arm64` |
+| `darwin-x64` | macOS Intel | `build/overlay-manager-darwin-x64` |
+| `linux-x64` | Linux x86_64 | `build/overlay-manager-linux-x64` |
+| `linux-arm64` | Linux aarch64 | `build/overlay-manager-linux-arm64` |
+| `windows-x64` | Windows x86_64 | `build/overlay-manager-windows-x64.exe` |
 
 ---
 

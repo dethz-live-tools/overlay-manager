@@ -163,4 +163,20 @@ libs:
 
     rmSync(testStaticRoot, { recursive: true, force: true });
   });
+
+  it("configures OS build targets into ./build and dist into ./dist", async () => {
+    const { OS_TARGETS } = await import("../scripts/build");
+    expect(OS_TARGETS.length).toBeGreaterThanOrEqual(6);
+    const ids = OS_TARGETS.map((t) => t.id);
+    expect(ids).toContain("current");
+    expect(ids).toContain("darwin-arm64");
+    expect(ids).toContain("darwin-x64");
+    expect(ids).toContain("linux-x64");
+    expect(ids).toContain("linux-arm64");
+    expect(ids).toContain("windows-x64");
+
+    for (const target of OS_TARGETS) {
+      expect(target.output.startsWith("build/")).toBe(true);
+    }
+  });
 });

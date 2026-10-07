@@ -19,16 +19,19 @@
   ],
   "scripts": {
     "dev": "bun run src/cli.ts",
-    "build": "bun run build:cli && bun run build:lib && bun run build:types",
+    "build": "bun run scripts/build.ts",
+    "build:script": "bun run scripts/build.ts",
+    "build:dist": "bun run scripts/build.ts --dist",
+    "build:os": "bun run scripts/build.ts --all-os",
+    "build:all": "bun run scripts/build.ts --all",
     "build:cli": "bun build src/cli.ts --outfile dist/cli.mjs --target node && chmod +x dist/cli.mjs",
     "build:lib": "bun build src/index.ts --outfile dist/index.mjs --target node",
     "build:types": "tsc -p tsconfig.build.json",
     "build:bin": "bun build src/cli.ts --compile --outfile build/overlay-manager",
-    "build:all": "bun run build && bun run build:bin",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "start": "bun run src/cli.ts",
-    "prepack": "bun run build"
+    "prepack": "bun run build:dist"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.7.3",
